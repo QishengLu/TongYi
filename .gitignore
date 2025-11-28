@@ -150,5 +150,8 @@ models/
 outputs/
 checkpoints/
 
+# Custom files
+tongyi_rca.py
 modification.md
-question_3/
+output/result.json
+output.json
