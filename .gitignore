@@ -149,3 +149,6 @@ cache/
 models/
 outputs/
 checkpoints/
+
+modification.md
+question_3/

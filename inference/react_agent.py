@@ -17,11 +17,12 @@ from prompt import *
 import time
 import asyncio
 
-from tool_file import *
-from tool_scholar import *
+# from tool_file import *
+# from tool_scholar import *
 from tool_python import *
-from tool_search import *
-from tool_visit import *
+# from tool_search import *
+# from tool_visit import *
+from tool_parquet import *
 
 OBS_START = '<tool_response>'
 OBS_END = '\n</tool_response>'
@@ -29,11 +30,14 @@ OBS_END = '\n</tool_response>'
 MAX_LLM_CALL_PER_RUN = int(os.getenv('MAX_LLM_CALL_PER_RUN', 100))
 
 TOOL_CLASS = [
-    FileParser(),
-    Scholar(),
-    Visit(),
-    Search(),
+    # FileParser(),
+    # Scholar(),
+    # Visit(),
+    # Search(),
     PythonInterpreter(),
+    ListParquetFiles(),
+    GetParquetSchema(),
+    QueryParquet(),
 ]
 TOOL_MAP = {tool.name: tool for tool in TOOL_CLASS}
 
@@ -58,8 +62,12 @@ class MultiTurnReactAgent(FnCallAgent):
     
     def call_server(self, msgs, planning_port, max_tries=10):
         
-        openai_api_key = "EMPTY"
-        openai_api_base = f"http://127.0.0.1:{planning_port}/v1"
+        if os.environ.get("OPENAI_API_KEY"):
+            openai_api_key = os.environ.get("OPENAI_API_KEY")
+            openai_api_base = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        else:
+            openai_api_key = "EMPTY"
+            openai_api_base = f"http://127.0.0.1:{planning_port}/v1"
 
         client = OpenAI(
             api_key=openai_api_key,
@@ -78,7 +86,7 @@ class MultiTurnReactAgent(FnCallAgent):
                     temperature=self.llm_generate_cfg.get('temperature', 0.6),
                     top_p=self.llm_generate_cfg.get('top_p', 0.95),
                     logprobs=True,
-                    max_tokens=10000,
+                    max_tokens=4096,
                     presence_penalty=self.llm_generate_cfg.get('presence_penalty', 1.1)
                 )
                 content = chat_response.choices[0].message.content
@@ -110,10 +118,14 @@ class MultiTurnReactAgent(FnCallAgent):
         return f"vllm server error!!!"
 
     def count_tokens(self, messages):
-        tokenizer = AutoTokenizer.from_pretrained(self.llm_local_path) 
-        full_prompt = tokenizer.apply_chat_template(messages, tokenize=False)
-        tokens = tokenizer(full_prompt, return_tensors="pt")
-        token_count = len(tokens["input_ids"][0])
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(self.llm_local_path) 
+            full_prompt = tokenizer.apply_chat_template(messages, tokenize=False)
+            tokens = tokenizer(full_prompt, return_tensors="pt")
+            token_count = len(tokens["input_ids"][0])
+        except Exception:
+            # Fallback approximation
+            token_count = sum(len(str(m.get('content', ''))) for m in messages) // 3
         
         return token_count
 
